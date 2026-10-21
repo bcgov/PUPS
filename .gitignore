@@ -54,3 +54,6 @@ epups-spatial/logs/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Private planning notes (not for the repository)
+PLANNING.local.md
