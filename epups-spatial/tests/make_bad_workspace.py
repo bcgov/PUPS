@@ -9,7 +9,9 @@ FAIL and exit with code 1. Expected findings:
 - ERROR geometry: the polygon with no shape is empty
 - ERROR spatial-id: SPATIAL_ID 1 appears twice
 - ERROR version-link: VERSION_ID 999 has no version row
+- ERROR version-number: none expected (version numbers are unique here)
 - WARNING version-link: authorization 1 has two current versions
+- WARNING area: AREA_HA 5.0 does not match the 1.0 ha square
 """
 
 import sys
@@ -44,25 +46,36 @@ def main():
     now = datetime.now()
 
     # Version rows: two current versions for authorization 1 (warning).
-    version_fields = ["VERSION_ID", "AUTHORIZATIONID", "IS_CURRENT", "CREATED_DATE", "CREATED_BY"]
-    with arcpy.da.InsertCursor(str(paths["version"]), version_fields) as cursor:
-        cursor.insertRow((1, 1, 1, now, 1))
-        cursor.insertRow((2, 1, 1, now, 1))
-
-    # Polygon rows: empty geometry, duplicate SPATIAL_ID, orphan VERSION_ID.
-    # A self-intersecting polygon is not used here: ArcGIS splits it into
-    # valid parts on insert, so it is not a usable negative test.
-    spatial_fields = [
-        "SHAPE@", "SPATIAL_ID", "AUTHORIZATIONID", "VERSION_ID", "SPATIAL_STATUS",
-        "CREATED_DATE", "CREATED_BY", "LAST_EDITED_DATE", "LAST_EDITED_BY",
+    version_fields = [
+        "VERSION_ID", "AUTHORIZATIONID", "VERSION_NUMBER", "VERSION_STATUS",
+        "IS_CURRENT", "CREATED_DATE", "CREATED_BY",
     ]
-    rows = [
-        (None, 1, 1, 1, "DRAFT", now, 1, now, 1),
-        (square(200, 0), 1, 1, 1, "DRAFT", now, 1, now, 1),
-        (square(400, 0), 3, 1, 999, "DRAFT", now, 1, now, 1),
+    version_rows = [
+        (1, 1, 1, "DRAFT", 1, now, 1),
+        (2, 1, 2, "DRAFT", 1, now, 1),
+    ]
+    with arcpy.da.InsertCursor(str(paths["version"]), version_fields) as cursor:
+        for row in version_rows:
+            cursor.insertRow(row)
+
+    # Polygon rows:
+    # - empty geometry, and SPATIAL_ID 1 duplicated (error)
+    # - orphan VERSION_ID 999 (error)
+    # - AREA_HA that does not match the geometry (warning)
+    # A self-intersecting polygon is not used: ArcGIS splits it into valid
+    # parts on insert, so it is not a usable negative test.
+    spatial_fields = [
+        "SHAPE@", "SPATIAL_ID", "VERSION_ID", "SOURCE_TYPE",
+        "GEOMETRY_QA_STATUS", "OUT_OF_BOUNDARY_FLAG", "AREA_HA",
+    ]
+    spatial_rows = [
+        (None, 1, 1, "GIS_DIGITIZED", "NOT_CHECKED", 0, None),
+        (square(200, 0), 1, 1, "GIS_DIGITIZED", "NOT_CHECKED", 0, 1.0),
+        (square(400, 0), 3, 999, "GIS_DIGITIZED", "NOT_CHECKED", 0, 1.0),
+        (square(600, 0), 4, 1, "GIS_DIGITIZED", "NOT_CHECKED", 0, 5.0),
     ]
     with arcpy.da.InsertCursor(str(paths["spatial"]), spatial_fields) as cursor:
-        for row in rows:
+        for row in spatial_rows:
             cursor.insertRow(row)
 
     print("=" * 60)

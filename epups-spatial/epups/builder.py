@@ -2,7 +2,8 @@
 Build the ePUPS spatial schema in a geodatabase.
 
 Used for both production and editor workspaces, so they always match.
-Every function leaves existing objects and fields unchanged.
+Every function leaves existing objects and fields unchanged, except that
+a missing domain link is added to an existing field.
 
 Written against file geodatabases. Enterprise geodatabases qualify
 object names with the owner (for example OWNER.ePup_Spatial), which
@@ -15,6 +16,8 @@ import arcpy
 
 from epups import schema
 
+COPY_VIEW_NAME = "epups_copy_source"
+
 
 def object_paths(gdb_path):
     gdb_path = Path(gdb_path)
@@ -24,6 +27,7 @@ def object_paths(gdb_path):
         "dataset": dataset,
         "spatial": dataset / schema.SPATIAL_FC_NAME,
         "version": gdb_path / schema.VERSION_TABLE_NAME,
+        "users": gdb_path / schema.USERS_TABLE_NAME,
         "workspace_info": gdb_path / schema.WORKSPACE_INFO_TABLE_NAME,
     }
 
@@ -53,12 +57,15 @@ def create_file_gdb(folder, name):
 
 
 def build_schema(gdb_path, include_workspace_info=False):
-    """Create any missing ePUPS objects, fields and domains in gdb_path."""
+    """Create any missing ePUPS objects, fields, indexes and domains in gdb_path."""
     if not arcpy.Exists(str(gdb_path)):
         raise FileNotFoundError(f"Geodatabase not found: {gdb_path}")
 
     paths = object_paths(gdb_path)
     spatial_reference = arcpy.SpatialReference(schema.SPATIAL_REFERENCE_WKID)
+
+    print("\nDomains")
+    _ensure_domains(gdb_path)
 
     print("\nFeature dataset")
     if arcpy.Exists(str(paths["dataset"])):
@@ -72,6 +79,12 @@ def build_schema(gdb_path, include_workspace_info=False):
     print("\nVersion table")
     _ensure_table(gdb_path, schema.VERSION_TABLE_NAME)
     add_missing_fields(paths["version"], schema.VERSION_TABLE_FIELDS)
+    add_missing_indexes(paths["version"], schema.VERSION_INDEXES)
+
+    print("\nUsers table")
+    _ensure_table(gdb_path, schema.USERS_TABLE_NAME)
+    add_missing_fields(paths["users"], schema.USERS_FIELDS)
+    add_missing_indexes(paths["users"], schema.USERS_INDEXES)
 
     print("\nPolygon feature class")
     if arcpy.Exists(str(paths["spatial"])):
@@ -85,9 +98,7 @@ def build_schema(gdb_path, include_workspace_info=False):
         )
         print(f"  Created: {paths['spatial']}")
     add_missing_fields(paths["spatial"], schema.SPATIAL_FIELDS)
-
-    print("\nStatus domain")
-    _ensure_status_domain(gdb_path, paths["spatial"])
+    add_missing_indexes(paths["spatial"], schema.SPATIAL_INDEXES)
 
     if include_workspace_info:
         print("\nWorkspace info table")
@@ -98,13 +109,14 @@ def build_schema(gdb_path, include_workspace_info=False):
 
 
 def add_missing_fields(table_path, field_defs):
-    existing = {field.name.upper() for field in arcpy.ListFields(str(table_path))}
+    existing = {field.name.upper(): field for field in arcpy.ListFields(str(table_path))}
 
     for field in field_defs:
         name = field["name"]
 
         if name.upper() in existing:
             print(f"  Field already exists: {name}")
+            _assign_domain_if_missing(table_path, field, existing[name.upper()])
             continue
 
         kwargs = {
@@ -117,15 +129,53 @@ def add_missing_fields(table_path, field_defs):
         arcpy.management.AddField(str(table_path), name, field["type"], **kwargs)
         print(f"  Added field: {name}")
 
+        if field.get("default") is not None:
+            arcpy.management.AssignDefaultToField(str(table_path), name, field["default"])
+
+        if field.get("domain"):
+            arcpy.management.AssignDomainToField(str(table_path), name, field["domain"])
+            print(f"    Assigned domain: {field['domain']}")
+
+
+def add_missing_indexes(table_path, index_defs):
+    existing = {index.name for index in arcpy.Describe(str(table_path)).indexes}
+
+    for index in index_defs:
+        name = index["name"]
+
+        if name in existing:
+            print(f"  Index already exists: {name}")
+            continue
+
+        arcpy.management.AddIndex(
+            str(table_path),
+            ";".join(index["fields"]),
+            name,
+            "UNIQUE" if index["unique"] else "NON_UNIQUE",
+        )
+        print(f"  Added index: {name}")
+
 
 def copy_records(source_path, target_path, where_clause=None):
-    """Append records from source to target. Returns the number copied."""
-    kwargs = {"schema_type": "TEST"}
-    if where_clause:
-        kwargs["expression"] = where_clause
+    """
+    Append records from source to target, optionally only those matching where_clause.
+    Returns the number of records added.
+
+    Append has no where clause of its own, so the filter goes on a layer or
+    table view, which is appended instead.
+    """
+    where_clause = where_clause or ""
+
+    if arcpy.Describe(str(source_path)).dataType == "FeatureClass":
+        arcpy.management.MakeFeatureLayer(str(source_path), COPY_VIEW_NAME, where_clause)
+    else:
+        arcpy.management.MakeTableView(str(source_path), COPY_VIEW_NAME, where_clause)
 
     before = int(arcpy.management.GetCount(str(target_path))[0])
-    arcpy.management.Append(str(source_path), str(target_path), **kwargs)
+    try:
+        arcpy.management.Append(COPY_VIEW_NAME, str(target_path), "TEST")
+    finally:
+        arcpy.management.Delete(COPY_VIEW_NAME)
     after = int(arcpy.management.GetCount(str(target_path))[0])
 
     return after - before
@@ -141,31 +191,25 @@ def _ensure_table(gdb_path, table_name):
         print(f"  Created: {table_path}")
 
 
-def _ensure_status_domain(gdb_path, spatial_path):
-    domains = {domain.name for domain in arcpy.da.ListDomains(str(gdb_path))}
+def _ensure_domains(gdb_path):
+    existing = {domain.name for domain in arcpy.da.ListDomains(str(gdb_path))}
 
-    if schema.SPATIAL_STATUS_DOMAIN in domains:
-        print(f"  Domain already exists: {schema.SPATIAL_STATUS_DOMAIN}")
-    else:
+    for name, spec in schema.DOMAINS.items():
+        if name in existing:
+            print(f"  Domain already exists: {name}")
+            continue
+
         arcpy.management.CreateDomain(
-            str(gdb_path),
-            schema.SPATIAL_STATUS_DOMAIN,
-            "ePUPS spatial workflow status",
-            "TEXT",
-            "CODED",
+            str(gdb_path), name, spec["description"], spec["field_type"], "CODED"
         )
-        for value in schema.SPATIAL_STATUS_VALUES:
-            arcpy.management.AddCodedValueToDomain(
-                str(gdb_path), schema.SPATIAL_STATUS_DOMAIN, value, value
-            )
-        print(f"  Created domain: {schema.SPATIAL_STATUS_DOMAIN}")
+        for value in spec["values"]:
+            arcpy.management.AddCodedValueToDomain(str(gdb_path), name, value, value)
+        print(f"  Created domain: {name}")
 
-    for field in arcpy.ListFields(str(spatial_path), "SPATIAL_STATUS"):
-        if field.domain == schema.SPATIAL_STATUS_DOMAIN:
-            print("  Domain already assigned to SPATIAL_STATUS")
-            return
 
-    arcpy.management.AssignDomainToField(
-        str(spatial_path), "SPATIAL_STATUS", schema.SPATIAL_STATUS_DOMAIN
-    )
-    print("  Assigned domain to SPATIAL_STATUS")
+def _assign_domain_if_missing(table_path, field_def, existing_field):
+    domain = field_def.get("domain")
+
+    if domain and existing_field.domain != domain:
+        arcpy.management.AssignDomainToField(str(table_path), field_def["name"], domain)
+        print(f"  Assigned domain {domain} to existing field {field_def['name']}")

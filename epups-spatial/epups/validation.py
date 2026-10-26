@@ -4,7 +4,8 @@ QA/QC checks for an editor workspace, run before its records go to production.
 Each check returns a list of Issue. An ERROR must be fixed before promotion.
 A WARNING needs a reviewer decision but does not block promotion.
 
-Geometry checks use arcpy.management.CheckGeometry.
+Geometry checks use arcpy.management.CheckGeometry. Area checks assume the
+spatial reference is in metres (EPSG:3005).
 """
 
 from collections import Counter, namedtuple
@@ -25,9 +26,11 @@ ARCGIS_TYPE_NAMES = {
     "SHORT": "SmallInteger",
     "TEXT": "String",
     "DATE": "Date",
+    "DOUBLE": "Double",
 }
 
 GEOMETRY_TEMP_TABLE = "in_memory\\qa_geometry_problems"
+SQUARE_METRES_PER_HECTARE = 10000.0
 
 
 def run_all(gdb_path, production_path=None):
@@ -43,9 +46,13 @@ def run_all(gdb_path, production_path=None):
 
     issues += check_spatial_reference(paths["spatial"])
     issues += check_geometry(paths["spatial"])
-    issues += check_attributes(paths["spatial"])
+    issues += check_attributes(paths["users"], schema.USERS_FIELDS)
+    issues += check_attributes(paths["version"], schema.VERSION_TABLE_FIELDS)
+    issues += check_attributes(paths["spatial"], schema.SPATIAL_FIELDS)
     issues += check_unique_spatial_ids(paths["spatial"])
+    issues += check_unique_version_numbers(paths["version"])
     issues += check_version_links(paths)
+    issues += check_area(paths["spatial"])
 
     return issues
 
@@ -78,12 +85,13 @@ def check_schema_version(gdb_path):
 
 
 def check_structure(paths):
-    """Objects and fields exist with the expected types and domain."""
+    """Objects and fields exist with the expected types and domain links."""
     issues = []
 
     for key, name, field_defs in (
         ("version", schema.VERSION_TABLE_NAME, schema.VERSION_TABLE_FIELDS),
         ("spatial", schema.SPATIAL_FC_NAME, schema.SPATIAL_FIELDS),
+        ("users", schema.USERS_TABLE_NAME, schema.USERS_FIELDS),
     ):
         path = paths[key]
 
@@ -144,30 +152,33 @@ def check_geometry(spatial_path):
     return issues
 
 
-def check_attributes(spatial_path):
-    """Required values are filled in and SPATIAL_STATUS is a known value.
+def check_attributes(table_path, field_defs):
+    """
+    Required values are filled in, and coded fields hold a value from their domain.
 
     Empty geometry is reported by check_geometry, so it is not checked here.
     """
-    required = [field["name"] for field in schema.SPATIAL_FIELDS if not field["nullable"]]
-    cursor_fields = ["OID@"] + required
-    status_index = cursor_fields.index("SPATIAL_STATUS") if "SPATIAL_STATUS" in required else None
+    required = [field["name"] for field in field_defs if not field["nullable"]]
+    domain_fields = {field["name"]: field["domain"] for field in field_defs if field.get("domain")}
+    check_names = list(dict.fromkeys(required + list(domain_fields)))
+    table_name = Path(str(table_path)).name
 
     issues = []
-    with arcpy.da.SearchCursor(str(spatial_path), cursor_fields) as cursor:
+    with arcpy.da.SearchCursor(str(table_path), ["OID@"] + check_names) as cursor:
         for row in cursor:
-            oid, values = row[0], row[1:]
-            record = f"OBJECTID {oid}"
+            record = f"{table_name} OBJECTID {row[0]}"
+            values = dict(zip(check_names, row[1:]))
 
-            for name, value in zip(required, values):
+            for name in required:
+                value = values[name]
                 if value is None or (isinstance(value, str) and not value.strip()):
                     issues.append(Issue(ERROR, "required", record, f"Missing value: {name}"))
 
-            if status_index is not None:
-                status = row[status_index]
-                if status is not None and status not in schema.SPATIAL_STATUS_VALUES:
+            for name, domain in domain_fields.items():
+                value = values[name]
+                if value is not None and value not in schema.DOMAINS[domain]["values"]:
                     issues.append(Issue(
-                        ERROR, "domain", record, f"Invalid SPATIAL_STATUS: {status}"))
+                        ERROR, "domain", record, f"Invalid {name}: {value} (not in {domain})"))
 
     return issues
 
@@ -180,6 +191,18 @@ def check_unique_spatial_ids(spatial_path):
         Issue(ERROR, "spatial-id", f"SPATIAL_ID {value}",
               f"Duplicate SPATIAL_ID appears {count} times")
         for value, count in Counter(ids).items() if count > 1
+    ]
+
+
+def check_unique_version_numbers(version_path):
+    with arcpy.da.SearchCursor(str(version_path), ["AUTHORIZATIONID", "VERSION_NUMBER"]) as cursor:
+        pairs = [row for row in cursor if None not in row]
+
+    return [
+        Issue(ERROR, "version-number",
+              f"AUTHORIZATIONID {authorization_id} VERSION_NUMBER {number}",
+              f"Duplicate version number appears {count} times")
+        for (authorization_id, number), count in Counter(pairs).items() if count > 1
     ]
 
 
@@ -208,5 +231,31 @@ def check_version_links(paths):
               f"{count} current versions; expected at most one")
         for authorization_id, count in current_counts.items() if count > 1
     ]
+
+    return issues
+
+
+def check_area(spatial_path):
+    """AREA_HA should be filled in and match the geometry (metres to hectares)."""
+    issues = []
+
+    with arcpy.da.SearchCursor(str(spatial_path), ["OID@", "SHAPE@", "AREA_HA"]) as cursor:
+        for oid, shape, area_ha in cursor:
+            if shape is None:
+                continue  # reported by check_geometry
+
+            record = f"OBJECTID {oid}"
+
+            if area_ha is None:
+                issues.append(Issue(WARNING, "area", record, "AREA_HA not calculated"))
+                continue
+
+            expected_ha = shape.area / SQUARE_METRES_PER_HECTARE
+            tolerance = max(0.01, expected_ha * 0.001)
+
+            if abs(area_ha - expected_ha) > tolerance:
+                issues.append(Issue(
+                    WARNING, "area", record,
+                    f"AREA_HA {area_ha:.4f} differs from geometry {expected_ha:.4f} ha"))
 
     return issues
