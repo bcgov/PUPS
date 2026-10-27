@@ -1,0 +1,7 @@
+// Constraint on ePup_Spatial_Version: VERSION_ID must be unique.
+var self = IIf(IsEmpty($feature.OBJECTID), -1, $feature.OBJECTID)
+var others = Filter(
+  FeatureSetByName($datastore, "ePup_Spatial_Version", ["VERSION_ID", "OBJECTID"], false),
+  "VERSION_ID = " + Text($feature.VERSION_ID) + " AND OBJECTID <> " + Text(self)
+)
+return Count(others) == 0

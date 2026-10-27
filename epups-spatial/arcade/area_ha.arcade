@@ -1,0 +1,7 @@
+// Calculation on ePup_Spatial: AREA_HA from the shape, in hectares.
+// EPSG:3005 is in metres, so square metres / 10000 gives hectares.
+// Returns null when there is no geometry, so AREA_HA stays empty and QA flags it.
+if (IsEmpty($feature)) {
+  return null
+}
+return Area($feature) / 10000

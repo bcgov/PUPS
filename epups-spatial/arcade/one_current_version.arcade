@@ -1,0 +1,13 @@
+// Constraint on ePup_Spatial_Version: only one current version per AUTHORIZATIONID.
+// A row that is not current always passes.
+if ($feature.IS_CURRENT != 1) {
+  return true
+}
+
+var self = IIf(IsEmpty($feature.OBJECTID), -1, $feature.OBJECTID)
+var others = Filter(
+  FeatureSetByName($datastore, "ePup_Spatial_Version", ["AUTHORIZATIONID", "IS_CURRENT", "OBJECTID"], false),
+  "AUTHORIZATIONID = " + Text($feature.AUTHORIZATIONID) +
+  " AND IS_CURRENT = 1 AND OBJECTID <> " + Text(self)
+)
+return Count(others) == 0

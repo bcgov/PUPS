@@ -1,0 +1,8 @@
+// Constraint on ePup_Spatial: SPATIAL_ID must be unique.
+// Compares against every other row, excluding this row on update.
+var self = IIf(IsEmpty($feature.OBJECTID), -1, $feature.OBJECTID)
+var others = Filter(
+  FeatureSetByName($datastore, "ePup_Spatial", ["SPATIAL_ID", "OBJECTID"], false),
+  "SPATIAL_ID = " + Text($feature.SPATIAL_ID) + " AND OBJECTID <> " + Text(self)
+)
+return Count(others) == 0
