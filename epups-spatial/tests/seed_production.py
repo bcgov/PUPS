@@ -39,12 +39,17 @@ from datetime import datetime  # noqa: E402
 
 PROTECTED_LANDS = "Ref_Protected_Lands"
 BC_BOUNDARY = "Ref_BC_Boundary"
-SQUARE_SIZE = 100       # metres, so each polygon is 1 ha
-STEP = 50               # metres between squares while walking out of the park
-OUTSIDE_STEP = 500      # coarser steps once past the edge
-MAX_DISTANCE = 200000   # give up on a park after walking this far (metres)
+SQUARE_SIZE = 100            # metres, so each polygon is 1 ha
+EDGE_PRECISION = 50          # metres; the crossing square overlaps the last inside one
+OUTSIDE_STEP = 500           # metres between tries for the outside square
+OUTSIDE_TRIES = 40           # give up on a park after 20 km past its edge
+# Medium-sized parks have simpler outlines, so the checks stay fast.
+PARK_AREA_RANGE = (1e6, 1e8)  # square metres: 1 to 100 km2
 PARKS_TO_TRY = 50
 DISSOLVE_TEMP = "in_memory\\epups_seed_union"
+
+# Print as we go, even when the output is piped to Tee-Object.
+sys.stdout.reconfigure(line_buffering=True)
 
 
 def square_around(x, y, size=SQUARE_SIZE):
@@ -74,42 +79,45 @@ def dissolved_shape(feature_class):
 
 def place_squares(park, protected, bc):
     """
-    Walk east from a point inside the park. Returns (inside, inside, crossing,
+    Look east from a point inside the park. Returns (inside, inside, crossing,
     outside) squares, or None if this park doesn't give all four.
+
+    The edge is found by halving the distance (about 15 checks against this one
+    park). The merged protected-land and BC shapes are large and slow, so they
+    are only checked for the final candidates.
     """
     start = park.labelPoint
-    inside = []
-    crossing = None
-    distance = 0
 
-    while distance <= MAX_DISTANCE:
-        square = square_around(start.X + distance, start.Y)
+    def square_at(distance):
+        return square_around(start.X + distance, start.Y)
 
-        if not bc.contains(square):
-            return None  # walked out of BC (or started on the coast)
+    # Two inside squares, 200 m apart.
+    inside = [square_at(0), square_at(200)]
+    if not all(park.contains(square) for square in inside):
+        return None
 
-        if len(inside) < 2:
-            # Two inside squares, 200 m apart.
-            if not park.contains(square):
-                return None
-            if not inside or distance >= 200:
-                inside.append(square)
-            distance += STEP
-            continue
+    # Last inside square (low) and a square fully east of the park (high).
+    low = 200
+    high = park.extent.XMax - start.X + SQUARE_SIZE
+    while high - low > EDGE_PRECISION:
+        middle = (low + high) / 2.0
+        if park.contains(square_at(middle)):
+            low = middle
+        else:
+            high = middle
+    # Overlaps the last inside square, so it is partly inside the park.
+    crossing = square_at(high)
 
-        if crossing is None:
-            if park.contains(square) or protected.contains(square):
-                distance += STEP  # still inside protected land
-                continue
-            if protected.disjoint(square):
-                return None  # stepped clean over the edge; try another park
-            crossing = square
-            distance += OUTSIDE_STEP
-            continue
+    # A neighbouring protected area could cover the crossing square; skip the park then.
+    if protected.contains(crossing):
+        return None
+    if not all(bc.contains(square) for square in inside + [crossing]):
+        return None  # near the coast or the border; try another park
 
-        if protected.disjoint(square):
-            return inside[0], inside[1], crossing, square
-        distance += OUTSIDE_STEP
+    for step in range(1, OUTSIDE_TRIES + 1):
+        outside = square_at(high + step * OUTSIDE_STEP)
+        if protected.disjoint(outside):
+            return (*inside, crossing, outside) if bc.contains(outside) else None
 
     return None
 
@@ -166,17 +174,20 @@ def main():
 
     with arcpy.da.SearchCursor(str(paths["dataset"] / PROTECTED_LANDS), ["SHAPE@"]) as cursor:
         parks = [row[0] for row in cursor if row[0] is not None]
+    smallest, largest = PARK_AREA_RANGE
+    parks = [park for park in parks if smallest <= park.area <= largest]
     parks.sort(key=lambda shape: shape.area, reverse=True)
 
     squares = None
-    for park in parks[:PARKS_TO_TRY]:
+    for number, park in enumerate(parks[:PARKS_TO_TRY], start=1):
+        print(f"  Trying park {number} ({park.area / 1e6:.1f} km2)...")
         squares = place_squares(park, protected, bc)
         if squares:
             break
     if squares is None:
         raise RuntimeError(
-            f"Could not place the demo squares around the largest {PARKS_TO_TRY} "
-            "protected areas. Nothing was added."
+            f"Could not place the demo squares around {PARKS_TO_TRY} protected areas "
+            "of 1 to 100 km2. Nothing was added."
         )
 
     now = datetime.now()
