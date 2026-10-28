@@ -122,6 +122,12 @@ def check_structure(paths):
                     ERROR, "structure", name,
                     f"{field_name} is not linked to domain {definition['domain']}"))
 
+    # The relationship only helps people read the data, so a missing one is a warning.
+    if not arcpy.Exists(str(paths["relationship"])):
+        issues.append(Issue(
+            WARNING, "structure", schema.RELATIONSHIP_CLASS_NAME,
+            "Missing relationship class between versions and polygons"))
+
     return issues
 
 

@@ -29,6 +29,8 @@ def object_paths(gdb_path):
         "version": gdb_path / schema.VERSION_TABLE_NAME,
         "users": gdb_path / schema.USERS_TABLE_NAME,
         "workspace_info": gdb_path / schema.WORKSPACE_INFO_TABLE_NAME,
+        # Kept in the feature dataset, alongside the polygon class it relates.
+        "relationship": dataset / schema.RELATIONSHIP_CLASS_NAME,
     }
 
 
@@ -99,6 +101,9 @@ def build_schema(gdb_path, include_workspace_info=False):
         print(f"  Created: {paths['spatial']}")
     add_missing_fields(paths["spatial"], schema.SPATIAL_FIELDS)
     add_missing_indexes(paths["spatial"], schema.SPATIAL_INDEXES)
+
+    print("\nRelationship class")
+    _ensure_version_relationship(paths)
 
     if include_workspace_info:
         print("\nWorkspace info table")
@@ -189,6 +194,32 @@ def _ensure_table(gdb_path, table_name):
     else:
         arcpy.management.CreateTable(str(gdb_path), table_name)
         print(f"  Created: {table_path}")
+
+
+def _ensure_version_relationship(paths):
+    """
+    Simple one-to-many relationship: version (origin) to polygons (destination).
+    It shows the link in ArcGIS Pro. It does not cascade deletes or enforce the
+    key; the attribute rules and QA do the checking.
+    """
+    if arcpy.Exists(str(paths["relationship"])):
+        print(f"  Already exists: {paths['relationship']}")
+        return
+
+    arcpy.management.CreateRelationshipClass(
+        str(paths["version"]),
+        str(paths["spatial"]),
+        str(paths["relationship"]),
+        "SIMPLE",
+        "Polygons",
+        "Version",
+        "NONE",
+        "ONE_TO_MANY",
+        "NONE",
+        schema.RELATIONSHIP_KEY,
+        schema.RELATIONSHIP_KEY,
+    )
+    print(f"  Created: {paths['relationship']}")
 
 
 def _ensure_domains(gdb_path):

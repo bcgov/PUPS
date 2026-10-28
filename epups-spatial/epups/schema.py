@@ -16,8 +16,8 @@ Not created here: corral.pu_authorization. It lives in CORRAL and is only
 referenced by AUTHORIZATIONID.
 """
 
-# Bump when fields, domains or indexes change, so QA can detect stale workspaces.
-SCHEMA_VERSION = "0.2"
+# Bump when fields, domains, indexes or relationships change, so QA can detect stale workspaces.
+SCHEMA_VERSION = "0.3"
 
 SPATIAL_REFERENCE_WKID = 3005  # NAD 1983 BC Environment Albers, metres
 
@@ -26,6 +26,11 @@ SPATIAL_FC_NAME = "ePup_Spatial"
 VERSION_TABLE_NAME = "ePup_Spatial_Version"
 USERS_TABLE_NAME = "users"
 WORKSPACE_INFO_TABLE_NAME = "Workspace_Info"  # workspaces only
+
+# One version has many polygons, linked on VERSION_ID. Lets ArcGIS Pro show a
+# polygon's version (and so its authorization) when you identify it.
+RELATIONSHIP_CLASS_NAME = "ePup_Version_Polygons"
+RELATIONSHIP_KEY = "VERSION_ID"
 
 # Coded value domains (picklists). Each field lists its domain by name.
 DOMAINS = {

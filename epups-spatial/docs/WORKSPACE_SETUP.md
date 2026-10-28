@@ -66,6 +66,7 @@ The workspace contains:
 | `SpatialData\ePup_Spatial` | The permit polygons |
 | `ePup_Spatial_Version` | One row per permit version, with its authorization and status |
 | `users` | User records |
+| `SpatialData\ePup_Version_Polygons` | The link from each version to its polygons, on `VERSION_ID`. Identify a polygon to see its version and authorization |
 | `Workspace_Info` | One row saying where the workspace came from, who made it, and which records were copied |
 
 The workspace also has the attribute rules, which run when you edit it in ArcGIS Pro. The rule list is in `epups/rules.py`.

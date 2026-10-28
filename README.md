@@ -53,9 +53,10 @@ Paths in the examples below use the `\\spatialfiles.bcgov\...` form, which works
 | Script | What it does |
 |---|---|
 | `tests\make_bad_workspace.py` | Creates a workspace with planted errors. Run `qa_validate.py` on it; it should fail. |
-| `tests\seed_production.py` | Adds four test polygons and three versions to the dev production database. Refuses to run if versions exist. |
+| `tests\seed_production.py` | Adds three versions and four test polygons to the dev production database, placed around a real protected area: two inside, one crossing the edge, one outside protected land. Run after `fetch_reference_data.py` and before `build_topology.py`. Refuses to run if versions exist. |
 | `tests\test_attribute_rules.py <fresh workspace>` | Tries bad inserts (each should be rejected) and checks the area calculation. Use a fresh workspace. |
-| `tests\add_valid_test_polygon.py` | Adds one valid polygon inside a protected area (SPATIAL_ID 9001) to test that the topology passes it. |
+| `tests\list_topology_errors.py` | Lists the topology errors exported by `build_topology.py`, with the polygon each one refers to. |
+| `tests\reset_dev_data.py` | Deletes the dev production database and the `ws_*` test workspaces, so the demo data can be rebuilt. Lists only, unless run with `--yes`. Refuses to run unless production is the dev stand-in. |
 | `tests\diagnose_geometry.py <workspace.gdb>` | Lists polygons and their geometry checks, for troubleshooting. |
 
 Do not run the test or seed scripts against a database that holds real records.
