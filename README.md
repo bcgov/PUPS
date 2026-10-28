@@ -20,7 +20,6 @@ Tools for the ePUPS spatial database: park use permit polygons, the version hist
 | `epups-spatial/tests/` | Test and demo scripts (test data only) |
 | `epups-spatial/arcade/` | Attribute rule logic, in Arcade |
 | `epups-spatial/logs/` | QA reports and the reference data log (git ignored) |
-| `epups-spatial/scripts/_superseded/` | Earlier one-shot scripts, kept until the new ones are confirmed |
 
 ## Running the tools
 
@@ -66,8 +65,8 @@ Do not run the test or seed scripts against a database that holds real records.
 | Production schema and workspace tool | Built and tested on the VDI |
 | QA/QC checks | Built and tested, including planted errors |
 | Picklists (domains) | Built from the DBML. Values to confirm with the design owner. |
-| Attribute rules | Built and tested in a workspace. Not yet applied to production. |
-| Topology (protected lands and BC boundary) | Built and validated. Test polygons flagged; valid polygon passes. |
+| Attribute rules | Built and tested on the VDI (8 of 8 checks, 2026-10-28). Not yet applied to production. |
+| Topology (protected lands and BC boundary) | Built and runs on the VDI. Error count and valid-polygon check still to be confirmed in ArcGIS Pro. |
 | Promotion into production | Not started. Waits on the production server decision. |
 | Backups | Not started. Waits on the production server decision. |
 | Permit date rules and CORRAL sync | Not started. Waits on the source of permit dates. |
