@@ -82,20 +82,35 @@ def main():
     print(f"Attribute rule tests: {gdb_path}")
     print("=" * 60)
 
-    # Baseline rows the bad inserts will be compared against.
+    # Stop here if the workspace path is wrong. Otherwise every insert fails with
+    # "cannot open" and the bad-insert checks would wrongly report PASS.
+    missing = [name for name in ("users", "version", "spatial") if not arcpy.Exists(str(paths[name]))]
+    if missing:
+        print(f"Cannot find these tables: {', '.join(missing)}. Check the workspace path.")
+        sys.exit(2)
+
+    # Baseline rows the bad inserts will be compared against. If one fails, the
+    # later checks mean nothing, so stop.
     user_row = (1, "Test", "User", "TU")
     print("\nBaseline")
     error = try_insert(paths["users"], USER_FIELDS, user_row)
     print(f"  users row 1: {'added' if error is None else error.splitlines()[0]}")
+    baseline_failed = error is not None
 
     baseline_version = (101, 9001, 1, "DRAFT", 1, now, 1)
     error = try_insert(paths["version"], VERSION_FIELDS, baseline_version)
     print(f"  version 101 (auth 9001, number 1, current): "
           f"{'added' if error is None else error.splitlines()[0]}")
+    baseline_failed = baseline_failed or error is not None
 
     baseline_spatial = (square(0, 0), 501, 101, "GIS_DIGITIZED", "NOT_CHECKED", 0, None)
     error = try_insert(paths["spatial"], SPATIAL_FIELDS, baseline_spatial)
     print(f"  polygon SPATIAL_ID 501: {'added' if error is None else error.splitlines()[0]}")
+    baseline_failed = baseline_failed or error is not None
+
+    if baseline_failed:
+        print("A baseline row was rejected. Use a fresh workspace and check the rules before rerunning.")
+        sys.exit(1)
 
     print("\nRules that should reject a bad insert")
     report(results, "duplicate SPATIAL_ID 501",
