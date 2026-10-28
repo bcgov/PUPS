@@ -8,7 +8,12 @@ Rules:
 There is deliberately no overlap rule: permits may overlap each other.
 
 Run fetch_reference_data.py first, so the reference layers exist.
-Existing topology is left in place, and its rules are only added if missing.
+Rules are only added when the topology is created. If it already exists, its
+rules are left alone, so reruns do not duplicate them. To rebuild the rules,
+delete the topology in ArcGIS Pro and run this again.
+
+The validation errors are exported to logs\\topology_errors.gdb (not to
+production), and the count is printed.
 
 Run on the VDI from X:\\epups-spatial:
     propy.bat scripts\\build_topology.py
@@ -29,6 +34,29 @@ TOPOLOGY_NAME = "ePUPS_Topology"
 COVERED_BY = "Must Be Covered By Feature Class Of (Area-Area)"
 PROTECTED_LANDS = "Ref_Protected_Lands"
 BC_BOUNDARY = "Ref_BC_Boundary"
+ERROR_GDB_NAME = "topology_errors.gdb"
+ERROR_BASENAME = "topology_errors"
+
+arcpy.env.overwriteOutput = True
+
+
+def export_errors(topology):
+    """Export the topology errors to a separate geodatabase. Returns the error count."""
+    error_folder = PROJECT_ROOT / "logs"
+    error_folder.mkdir(parents=True, exist_ok=True)
+    error_gdb = error_folder / ERROR_GDB_NAME
+    if not arcpy.Exists(str(error_gdb)):
+        arcpy.management.CreateFileGDB(str(error_folder), ERROR_GDB_NAME)
+
+    arcpy.management.ExportTopologyErrors(str(topology), str(error_gdb), ERROR_BASENAME)
+
+    count = 0
+    for suffix in ("point", "line", "poly"):
+        error_class = error_gdb / f"{ERROR_BASENAME}_{suffix}"
+        if arcpy.Exists(str(error_class)):
+            count += int(arcpy.management.GetCount(str(error_class))[0])
+    print(f"Errors exported to: {error_gdb}")
+    return count
 
 
 def main():
@@ -48,10 +76,12 @@ def main():
             )
 
     if arcpy.Exists(str(topology)):
-        print(f"Topology already exists: {topology}")
+        print(f"Topology already exists, rules left as they are: {topology}")
+        rules_needed = False
     else:
         arcpy.management.CreateTopology(str(dataset), TOPOLOGY_NAME)
         print(f"Created topology: {topology}")
+        rules_needed = True
 
     for name in (schema.SPATIAL_FC_NAME, PROTECTED_LANDS, BC_BOUNDARY):
         try:
@@ -62,8 +92,8 @@ def main():
         except arcpy.ExecuteError as error:
             print(f"  Already in topology or failed: {name}\n    {error}")
 
-    for reference in (PROTECTED_LANDS, BC_BOUNDARY):
-        try:
+    if rules_needed:
+        for reference in (PROTECTED_LANDS, BC_BOUNDARY):
             arcpy.management.AddRuleToTopology(
                 str(topology),
                 COVERED_BY,
@@ -72,12 +102,12 @@ def main():
                 str(dataset / reference),
             )
             print(f"  Added rule: {schema.SPATIAL_FC_NAME} {COVERED_BY} {reference}")
-        except arcpy.ExecuteError as error:
-            print(f"  Rule not added (may already exist): {reference}\n    {error}")
 
     print("\nValidating topology...")
     arcpy.management.ValidateTopology(str(topology))
-    print("Validation finished. Open the topology in ArcGIS Pro's Error Inspector to see errors.")
+    error_count = export_errors(topology)
+
+    print(f"\nRESULT: {error_count} topology error(s). Open the Error Inspector to see them.")
     print("=" * 60)
 
 
