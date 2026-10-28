@@ -20,6 +20,8 @@ Tools for the ePUPS spatial database: park use permit polygons, the version hist
 | `epups-spatial/tests/` | Test and demo scripts (test data only) |
 | `epups-spatial/arcade/` | Attribute rule logic, in Arcade |
 | `epups-spatial/logs/` | QA reports and the reference data log (git ignored) |
+| `epups-spatial/docs/WORKSPACE_SETUP.md` | How to create and check a workspace in ArcGIS Pro (for editors) |
+| `epups-spatial/docs/DECISIONS.md` | Confirmed decisions and open questions |
 
 ## Running the tools
 
