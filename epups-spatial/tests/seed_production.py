@@ -48,9 +48,6 @@ PARK_AREA_RANGE = (1e6, 1e8)  # square metres: 1 to 100 km2
 PARKS_TO_TRY = 50
 DISSOLVE_TEMP = "in_memory\\epups_seed_union"
 
-# Print as we go, even when the output is piped to Tee-Object.
-sys.stdout.reconfigure(line_buffering=True)
-
 
 def square_around(x, y, size=SQUARE_SIZE):
     half = size / 2.0
