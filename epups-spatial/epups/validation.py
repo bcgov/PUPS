@@ -13,7 +13,7 @@ from pathlib import Path
 
 import arcpy
 
-from epups import builder, schema
+from epups import builder, config, schema
 
 ERROR = "ERROR"
 WARNING = "WARNING"
@@ -53,6 +53,7 @@ def run_all(gdb_path, production_path=None):
     issues += check_unique_version_numbers(paths["version"])
     issues += check_version_links(paths)
     issues += check_area(paths["spatial"])
+    issues += check_reference_coverage(paths["spatial"], production_path or config.PRODUCTION_PATH)
 
     return issues
 
@@ -257,5 +258,48 @@ def check_area(spatial_path):
                 issues.append(Issue(
                     WARNING, "area", record,
                     f"AREA_HA {area_ha:.4f} differs from geometry {expected_ha:.4f} ha"))
+
+    return issues
+
+
+def check_reference_coverage(spatial_path, production_path):
+    """
+    Every polygon must sit inside protected land and inside the BC boundary.
+
+    The reference layers are read from production, so workspaces are checked
+    against the same boundaries that the production topology uses.
+    """
+    dataset = builder.object_paths(production_path)["dataset"]
+    references = (
+        ("Ref_Protected_Lands", "outside protected land"),
+        ("Ref_BC_Boundary", "outside the BC boundary"),
+    )
+    union_table = "in_memory\\epups_ref_union"
+    issues = []
+
+    for name, problem in references:
+        reference = dataset / name
+
+        if not arcpy.Exists(str(reference)):
+            issues.append(Issue(
+                WARNING, "reference", name,
+                f"{name} not found in production; not checked. Run fetch_reference_data.py."))
+            continue
+
+        if arcpy.Exists(union_table):
+            arcpy.management.Delete(union_table)
+        arcpy.management.Dissolve(str(reference), union_table)
+
+        with arcpy.da.SearchCursor(union_table, ["SHAPE@"]) as cursor:
+            union_shape = next((row[0] for row in cursor), None)
+
+        with arcpy.da.SearchCursor(str(spatial_path), ["OID@", "SHAPE@"]) as cursor:
+            for oid, shape in cursor:
+                if shape is None:
+                    continue  # reported by check_geometry
+                if union_shape is None or not union_shape.contains(shape):
+                    issues.append(Issue(ERROR, "reference", f"OBJECTID {oid}", f"Polygon is {problem}"))
+
+        arcpy.management.Delete(union_table)
 
     return issues

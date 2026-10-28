@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import arcpy  # noqa: E402
 
-from epups import builder, config, schema  # noqa: E402
+from epups import attribute_rules, builder, config, schema  # noqa: E402
 
 
 def main():
@@ -34,6 +34,7 @@ def main():
         builder.create_file_gdb(config.PRODUCTION_FOLDER, config.PRODUCTION_GDB_NAME)
 
     paths = builder.build_schema(config.PRODUCTION_PATH)
+    attribute_rules.apply_all(config.PRODUCTION_PATH)
 
     spatial = arcpy.Describe(str(paths["spatial"]))
     print("\nVerification")

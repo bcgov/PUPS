@@ -41,7 +41,8 @@ def square(x, y):
 
 
 def main():
-    gdb_path = workspace.create_workspace("qa_negative")
+    # No attribute rules here: the rules would reject these bad rows before QA runs.
+    gdb_path = workspace.create_workspace("qa_negative", apply_rules=False)
     paths = builder.object_paths(gdb_path)
     now = datetime.now()
 

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import arcpy
 
-from epups import builder, config, schema
+from epups import attribute_rules, builder, config, schema
 
 
 def workspace_gdb_name(label):
@@ -47,10 +47,13 @@ def create_workspace(
     copy_all=False,
     authorization_ids=None,
     production_path=None,
+    apply_rules=True,
 ):
     """
     Create a workspace and return its geodatabase path.
 
+    apply_rules: add the attribute rules. Only test code that needs to write
+    bad records passes False; editors always get the rules.
     copy_all: copy every production record.
     authorization_ids: copy only versions and polygons for these authorizations.
     Neither: the workspace starts empty.
@@ -67,6 +70,8 @@ def create_workspace(
 
     gdb_path = builder.create_file_gdb(folder, workspace_gdb_name(label))
     paths = builder.build_schema(gdb_path, include_workspace_info=True)
+    if apply_rules:
+        attribute_rules.apply_all(gdb_path)
 
     version_filter = None
     if authorization_ids:
