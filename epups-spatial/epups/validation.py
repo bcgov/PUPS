@@ -8,15 +8,32 @@ Geometry checks use arcpy.management.CheckGeometry. Area checks assume the
 spatial reference is in metres (EPSG:3005).
 """
 
+import re
 from collections import Counter, namedtuple
 from pathlib import Path
 
 import arcpy
 
-from epups import builder, config, schema
+from epups import builder, config, schema, versioning
+
+# Imported after arcpy, matching scripts/qa_validate.py.
+from datetime import datetime  # noqa: E402
 
 ERROR = "ERROR"
 WARNING = "WARNING"
+
+# Checks whose errors are about the whole workspace, not one polygon.
+WORKSPACE_CHECKS = ("schema-version", "structure", "spatial-reference")
+
+# How an issue names a polygon: "OBJECTID 3" or "ePup_Spatial OBJECTID 3",
+# "SPATIAL_ID 5", or a whole authorization, "AUTHORIZATIONID 6812345".
+_POLYGON_RECORD = re.compile(rf"^(?:{schema.SPATIAL_FC_NAME} )?OBJECTID (\d+)$")
+_SPATIAL_ID_RECORD = re.compile(r"^SPATIAL_ID (-?\d+)$")
+_AUTHORIZATION_RECORD = re.compile(r"^AUTHORIZATIONID (\d+)$")
+
+# GEOMETRY_QA_STATUS values written back (domain ePup_Geometry_QA_Status).
+QA_PASS, QA_NEEDS_REVIEW, QA_FAIL = "PASS", "NEEDS_REVIEW", "FAIL"
+QA_NOTE_LENGTH = 500
 
 Issue = namedtuple("Issue", ["severity", "check", "record", "message"])
 
@@ -39,6 +56,7 @@ def run_all(gdb_path, production_path=None):
 
     issues = check_schema_version(gdb_path)
     issues += check_structure(paths)
+    issues += check_extra_datasets(gdb_path)
 
     # Attribute and geometry checks would fail on a broken structure, so stop here.
     if any(issue.severity == ERROR for issue in issues):
@@ -54,6 +72,7 @@ def run_all(gdb_path, production_path=None):
     issues += check_version_links(paths)
     issues += check_area(paths["spatial"])
     issues += check_reference_coverage(paths["spatial"], production_path or config.PRODUCTION_PATH)
+    issues += check_new_versions(gdb_path, production_path or config.PRODUCTION_PATH)
 
     return issues
 
@@ -61,6 +80,105 @@ def run_all(gdb_path, production_path=None):
 def count_by_severity(issues):
     counts = Counter(issue.severity for issue in issues)
     return counts.get(ERROR, 0), counts.get(WARNING, 0)
+
+
+def issues_by_polygon(gdb_path, issues):
+    """{OBJECTID: [Issue, ...]} for every polygon in the workspace, including those with no issues."""
+    paths = builder.object_paths(gdb_path)
+    versions = versioning.read_versions(paths["version"])
+
+    with arcpy.da.SearchCursor(str(paths["spatial"]), ["OID@", "SPATIAL_ID", "VERSION_ID"]) as cursor:
+        polygons = list(cursor)
+
+    by_polygon = {oid: [] for oid, _, _ in polygons}
+    for issue in issues:
+        match = _POLYGON_RECORD.match(issue.record)
+        if match:
+            oid = int(match.group(1))
+            if oid in by_polygon:
+                by_polygon[oid].append(issue)
+            continue
+        match = _SPATIAL_ID_RECORD.match(issue.record)
+        if match:
+            targets = [oid for oid, spatial_id, _ in polygons if spatial_id == int(match.group(1))]
+        else:
+            match = _AUTHORIZATION_RECORD.match(issue.record)
+            if not match:
+                continue
+            targets = [
+                oid for oid, _, version_id in polygons
+                if version_id in versions and versions[version_id].authorization_id == int(match.group(1))
+            ]
+        for oid in targets:
+            by_polygon[oid].append(issue)
+    return by_polygon
+
+
+def write_results(gdb_path, issues, checker_id=None):
+    """
+    Write the QA result onto each polygon: GEOMETRY_QA_STATUS (FAIL on any
+    error, NEEDS_REVIEW on warnings only, else PASS), QA_CHECKED_DATE,
+    QA_CHECKED_BY (users.UserID), QA_NOTE (the messages), and
+    OUT_OF_BOUNDARY_FLAG (1 if outside protected land or BC).
+
+    Returns (written, failed). A polygon the attribute rules won't save (for
+    example a duplicate SPATIAL_ID) is counted as failed; its errors are still
+    in the report.
+    """
+    by_polygon = issues_by_polygon(gdb_path, issues)
+    now = datetime.now()
+    fields = ["OID@", "GEOMETRY_QA_STATUS", "QA_CHECKED_DATE", "QA_CHECKED_BY", "QA_NOTE", "OUT_OF_BOUNDARY_FLAG"]
+    written = failed = 0
+
+    with arcpy.da.UpdateCursor(str(builder.object_paths(gdb_path)["spatial"]), fields) as cursor:
+        for row in cursor:
+            found = by_polygon.get(row[0], [])
+            if any(issue.severity == ERROR for issue in found):
+                status = QA_FAIL
+            elif found:
+                status = QA_NEEDS_REVIEW
+            else:
+                status = QA_PASS
+            note = "; ".join(f"{issue.severity} {issue.check}: {issue.message}" for issue in found)
+            outside = int(any(issue.check == "reference" and issue.severity == ERROR for issue in found))
+            try:
+                cursor.updateRow([row[0], status, now, checker_id, note[:QA_NOTE_LENGTH] or None, outside])
+                written += 1
+            except RuntimeError:
+                failed += 1
+    return written, failed
+
+
+def write_report(gdb_path, issues, timestamp, folder=None):
+    """Write the QA report to folder (default config.LOG_FOLDER). Returns (path, result, errors, warnings)."""
+    folder = Path(folder) if folder else config.LOG_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    errors, warnings = count_by_severity(issues)
+    result = "PASS" if errors == 0 else "FAIL"
+
+    report_path = folder / f"qa_{Path(gdb_path).stem}_{timestamp:%Y%m%d_%H%M%S}.txt"
+
+    lines = [
+        "ePUPS workspace QA report",
+        f"Workspace: {gdb_path}",
+        f"Run: {timestamp:%Y-%m-%d %H:%M:%S}",
+        f"Schema version: {schema.SCHEMA_VERSION}",
+        f"Result: {result} ({errors} errors, {warnings} warnings)",
+        "",
+    ]
+
+    if issues:
+        lines.append(f"{'Severity':<9} {'Check':<18} {'Record':<26} Message")
+        lines.append("-" * 90)
+        for issue in issues:
+            lines.append(
+                f"{issue.severity:<9} {issue.check:<18} {issue.record:<26} {issue.message}"
+            )
+    else:
+        lines.append("No issues found.")
+
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_path, result, errors, warnings
 
 
 def check_schema_version(gdb_path):
@@ -131,6 +249,29 @@ def check_structure(paths):
     return issues
 
 
+def check_extra_datasets(gdb_path):
+    """
+    Tables and feature classes that aren't part of the ePUPS schema, such as the
+    Links table ArcGIS Pro's Transform tool leaves behind. They don't affect the
+    checks, but shouldn't be handed over.
+    """
+    expected = {
+        name.lower() for name in (
+            schema.SPATIAL_FC_NAME, schema.VERSION_TABLE_NAME, schema.USERS_TABLE_NAME,
+            schema.WORKSPACE_INFO_TABLE_NAME,
+        )
+    }
+    found = []
+    for _, _, names in arcpy.da.Walk(str(gdb_path), datatype=["FeatureClass", "Table"]):
+        found += [name for name in names if name.lower() not in expected]
+
+    return [
+        Issue(WARNING, "structure", name,
+              "Not part of the ePUPS schema (left by an editing tool?). Delete it before hand-over.")
+        for name in sorted(found)
+    ]
+
+
 def check_spatial_reference(spatial_path):
     wkid = arcpy.Describe(str(spatial_path)).spatialReference.factoryCode
 
@@ -194,11 +335,17 @@ def check_unique_spatial_ids(spatial_path):
     with arcpy.da.SearchCursor(str(spatial_path), ["SPATIAL_ID"]) as cursor:
         ids = [row[0] for row in cursor if row[0] is not None]
 
-    return [
+    issues = [
         Issue(ERROR, "spatial-id", f"SPATIAL_ID {value}",
               f"Duplicate SPATIAL_ID appears {count} times")
         for value, count in Counter(ids).items() if count > 1
     ]
+    # ArcGIS Pro fills an empty number field with 0, so 0 means it was never set.
+    issues += [
+        Issue(ERROR, "spatial-id", f"SPATIAL_ID {value}", "SPATIAL_ID must be above 0")
+        for value in sorted(set(ids)) if value <= 0
+    ]
+    return issues
 
 
 def check_unique_version_numbers(version_path):
@@ -309,3 +456,18 @@ def check_reference_coverage(spatial_path, production_path):
         arcpy.management.Delete(union_table)
 
     return issues
+
+
+def check_new_versions(gdb_path, production_path):
+    """Edited authorizations must have their new version (Finish or Save Draft)."""
+    if not arcpy.Exists(str(builder.object_paths(production_path)["version"])):
+        return [Issue(
+            WARNING, "new-version", "production",
+            "Production not found; edits not checked for a new version.")]
+
+    return [
+        Issue(ERROR, "new-version", f"AUTHORIZATIONID {authorization_id}",
+              f"Edited ({'; '.join(edits)}) but not saved as a new version. "
+              "Run Finish or Save Draft.")
+        for authorization_id, edits in sorted(versioning.unfinished_edits(gdb_path, production_path).items())
+    ]

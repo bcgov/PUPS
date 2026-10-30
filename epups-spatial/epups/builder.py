@@ -3,7 +3,8 @@ Build the ePUPS spatial schema in a geodatabase.
 
 Used for both production and editor workspaces, so they always match.
 Every function leaves existing objects and fields unchanged, except that
-a missing domain link is added to an existing field.
+a missing domain link is added to an existing field, and missing values are
+added to an existing domain.
 
 Written against file geodatabases. Enterprise geodatabases qualify
 object names with the owner (for example OWNER.ePup_Spatial), which
@@ -223,11 +224,17 @@ def _ensure_version_relationship(paths):
 
 
 def _ensure_domains(gdb_path):
-    existing = {domain.name for domain in arcpy.da.ListDomains(str(gdb_path))}
+    existing = {domain.name: domain for domain in arcpy.da.ListDomains(str(gdb_path))}
 
     for name, spec in schema.DOMAINS.items():
         if name in existing:
             print(f"  Domain already exists: {name}")
+            # Values added to the schema since the domain was made.
+            coded = existing[name].codedValues or {}
+            for value in spec["values"]:
+                if value not in coded:
+                    arcpy.management.AddCodedValueToDomain(str(gdb_path), name, value, value)
+                    print(f"    Added value: {value}")
             continue
 
         arcpy.management.CreateDomain(

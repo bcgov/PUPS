@@ -17,7 +17,8 @@ referenced by AUTHORIZATIONID.
 """
 
 # Bump when fields, domains, indexes or relationships change, so QA can detect stale workspaces.
-SCHEMA_VERSION = "0.3"
+# 0.4: Workspace_Info holds the editor and the defaults for new polygons.
+SCHEMA_VERSION = "0.4"
 
 SPATIAL_REFERENCE_WKID = 3005  # NAD 1983 BC Environment Albers, metres
 
@@ -34,10 +35,12 @@ RELATIONSHIP_KEY = "VERSION_ID"
 
 # Coded value domains (picklists). Each field lists its domain by name.
 DOMAINS = {
+    # SUBMITTED (finished by the editor, waiting for review) is not in the DBML;
+    # added 2026-10-29 for the review step. To confirm with the design owner.
     "ePup_Version_Status": {
         "description": "Workflow status of a permit version",
         "field_type": "TEXT",
-        "values": ("DRAFT", "APPROVED", "PUBLISHED", "SUPERSEDED", "EXPIRED"),
+        "values": ("DRAFT", "SUBMITTED", "APPROVED", "PUBLISHED", "SUPERSEDED", "EXPIRED"),
     },
     "ePup_Source_Type": {
         "description": "How a polygon was sourced",
@@ -343,6 +346,8 @@ USERS_INDEXES = [
 
 # One row per workspace, written when the workspace is created.
 # Lets QA see where a workspace came from without asking the editor.
+# The EDITOR_ID, ACTIVE_VERSION_ID and DEFAULT_ fields are set by the Start
+# Authorization tool. Attribute rules copy the defaults onto each new polygon.
 WORKSPACE_INFO_FIELDS = [
     {
         "name": "WORKSPACE_NAME",
@@ -390,5 +395,51 @@ WORKSPACE_INFO_FIELDS = [
         "nullable": True,
         "alias": "Copy filter",
         "notes": "Where clause used on the version table. Empty if none copied or all copied.",
+    },
+    {
+        "name": "EDITOR_ID",
+        "type": "LONG",
+        "nullable": True,
+        "alias": "Editor ID",
+        "notes": "users.UserID of the person editing. Stored on the versions they make.",
+    },
+    {
+        "name": "ACTIVE_VERSION_ID",
+        "type": "LONG",
+        "nullable": True,
+        "alias": "Active version",
+        "notes": "VERSION_ID new polygons are linked to (the permit chosen in Start or Resume Permit).",
+    },
+    {
+        "name": "DEFAULT_SOURCE_TYPE",
+        "type": "TEXT",
+        "length": 20,
+        "nullable": True,
+        "alias": "Default source type",
+        "domain": "ePup_Source_Type",
+        "notes": "Copied onto new polygons.",
+    },
+    {
+        "name": "DEFAULT_SOURCE_REFERENCE",
+        "type": "TEXT",
+        "length": 255,
+        "nullable": True,
+        "alias": "Default source reference",
+        "notes": "Copied onto new polygons left empty.",
+    },
+    {
+        "name": "DEFAULT_SOURCE_DATE",
+        "type": "DATE",
+        "nullable": True,
+        "alias": "Default source date",
+        "notes": "Copied onto new polygons left empty.",
+    },
+    {
+        "name": "DEFAULT_SOURCE_NOTE",
+        "type": "TEXT",
+        "length": 500,
+        "nullable": True,
+        "alias": "Default source note",
+        "notes": "Copied onto new polygons left empty.",
     },
 ]

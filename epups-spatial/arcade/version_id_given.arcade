@@ -1,0 +1,3 @@
+// Constraint on ePup_Spatial_Version: VERSION_ID must be given.
+// ArcGIS Pro fills an empty number field with 0, so 0 counts as not given.
+return !IsEmpty($feature.VERSION_ID) && $feature.VERSION_ID > 0

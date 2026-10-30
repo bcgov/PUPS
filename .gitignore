@@ -23,6 +23,8 @@ secrets.*
 # ArcGIS Pro local files
 *.aprx
 *.aprx.lock
+# Tool metadata Pro writes next to a Python toolbox; regenerated as needed.
+*.pyt.xml
 *.sde
 *.lyrx
 *.mapx

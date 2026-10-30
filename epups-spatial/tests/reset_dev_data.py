@@ -3,8 +3,9 @@ Delete the DEV production database and the editor test workspaces, so the
 demo data can be rebuilt from scratch.
 
 Test data only. Refuses to run unless production is the dev stand-in (its
-name contains "_dev"), and only deletes ws_*.gdb folders in the workspace
-folder. Close ArcGIS Pro first, or the geodatabases will be locked.
+name contains "_dev"), and only deletes the .gdb workspaces and .aprx
+projects in the workspace folder. Close ArcGIS Pro first, or the
+geodatabases will be locked.
 
 Run on the VDI from X:\\epups-spatial:
     propy.bat tests\\reset_dev_data.py          (lists what would be deleted)
@@ -43,7 +44,8 @@ def main():
     targets = []
     if arcpy.Exists(str(config.PRODUCTION_PATH)):
         targets.append(config.PRODUCTION_PATH)
-    targets += sorted(config.WORKSPACE_ROOT.glob("ws_*.gdb"))
+    targets += sorted(config.WORKSPACE_ROOT.glob("*.gdb"))
+    targets += sorted(config.WORKSPACE_ROOT.glob("*.aprx"))
 
     print("=" * 60)
     print("Reset dev data")
@@ -61,7 +63,10 @@ def main():
 
     print()
     for path in targets:
-        arcpy.management.Delete(str(path))
+        if path.suffix == ".aprx":
+            path.unlink()
+        else:
+            arcpy.management.Delete(str(path))
         print(f"Deleted: {path}")
     print("=" * 60)
 

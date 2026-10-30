@@ -8,8 +8,10 @@ or on a workspace you are still using.
 Run on the VDI:
     propy.bat tests\\test_attribute_rules.py "<path to a fresh workspace .gdb>"
 
-Each bad insert should be rejected (PASS). The area case should succeed and
-AREA_HA should be about 1.0 hectare for a 100 m x 100 m square.
+Each bad insert should be rejected (PASS). A polygon saved with its IDs left
+at 0 should get the next SPATIAL_ID and the newest VERSION_ID made in the
+workspace (above production's highest; the test versions are 101 to 104). The area case
+should succeed and AREA_HA should be about 1.0 hectare for a 100 m x 100 m square.
 """
 
 import sys
@@ -127,6 +129,12 @@ def main():
                             (103, 9001, 2, "DRAFT", 1, now, 1)))
     report(results, "duplicate UserID 1",
            True, try_insert(paths["users"], USER_FIELDS, (1, "Other", "User", "OU")))
+    report(results, "version with VERSION_ID 0 (not given)",
+           True, try_insert(paths["version"], VERSION_FIELDS,
+                            (0, 9003, 1, "DRAFT", 0, now, 1)))
+    report(results, "polygon with VERSION_ID 999 (no such version)",
+           True, try_insert(paths["spatial"], SPATIAL_FIELDS,
+                            (square(900, 0), 503, 999, "GIS_DIGITIZED", "NOT_CHECKED", 0, None)))
 
     print("\nRules that should accept a valid insert")
     report(results, "non-current version 2 for auth 9001",
@@ -135,6 +143,20 @@ def main():
     report(results, "new polygon SPATIAL_ID 502 with AREA_HA empty",
            False, try_insert(paths["spatial"], SPATIAL_FIELDS,
                              (square(300, 0), 502, 101, "GIS_DIGITIZED", "NOT_CHECKED", 0, None)))
+
+    print("\nAutomatic IDs")
+    report(results, "new polygon with SPATIAL_ID and VERSION_ID left at 0",
+           False, try_insert(paths["spatial"], SPATIAL_FIELDS,
+                             (square(600, 0), 0, 0, "GIS_DIGITIZED", "NOT_CHECKED", 0, None)))
+    # Highest so far is 502, so expect 503 (unless production's highest is above that),
+    # linked to version 104, the newest version made in this workspace.
+    with arcpy.da.SearchCursor(str(paths["spatial"]), ["SPATIAL_ID", "VERSION_ID"],
+                               sql_clause=(None, "ORDER BY OBJECTID DESC")) as cursor:
+        spatial_id, version_id = next(cursor)
+    ids_ok = spatial_id is not None and spatial_id > 502 and version_id == 104
+    results.append(ids_ok)
+    print(f"  {'PASS' if ids_ok else 'FAIL'}  assigned SPATIAL_ID {spatial_id}, VERSION_ID {version_id} "
+          f"(expected above 502, and 104)")
 
     print("\nArea calculation")
     with arcpy.da.SearchCursor(str(paths["spatial"]), ["SPATIAL_ID", "AREA_HA"],

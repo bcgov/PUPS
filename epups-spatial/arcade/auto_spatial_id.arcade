@@ -1,0 +1,16 @@
+// Calculation on ePup_Spatial, on insert: give a new polygon the next SPATIAL_ID.
+// ArcGIS Pro fills an empty number field with 0, so 0 means "assign one".
+// A SPATIAL_ID the editor typed in is kept.
+// The next ID is one above the highest in this table, and never at or below
+// {{SPATIAL_ID_FLOOR}}, the highest production SPATIAL_ID when the workspace was made.
+if (!IsEmpty($feature.SPATIAL_ID) && $feature.SPATIAL_ID > 0) {
+  return $feature.SPATIAL_ID
+}
+// Reads the top row rather than using Max(): in testing, Max() didn't see a
+// polygon added earlier in the same edit session, and handed out its ID again.
+var top = First(OrderBy(FeatureSetByName($datastore, "ePup_Spatial", ["SPATIAL_ID"], false), "SPATIAL_ID DESC"))
+var highest = 0
+if (!IsEmpty(top) && !IsEmpty(top.SPATIAL_ID)) {
+  highest = top.SPATIAL_ID
+}
+return Max(highest, {{SPATIAL_ID_FLOOR}}) + 1

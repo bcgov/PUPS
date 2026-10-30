@@ -1,0 +1,14 @@
+// Calculation on ePup_Spatial, on insert: set SOURCE_TYPE from the workspace's
+// default (set with the Start or Resume Permit tool).
+// Workspaces only (it reads Workspace_Info).
+// The field's own default, GIS_DIGITIZED, is filled in before this runs, so it
+// can't tell "left alone" from "chosen". It keeps any other value the editor
+// chose, and replaces GIS_DIGITIZED or empty with the workspace default.
+if (!IsEmpty($feature.SOURCE_TYPE) && $feature.SOURCE_TYPE != "GIS_DIGITIZED") {
+  return $feature.SOURCE_TYPE
+}
+var info = First(FeatureSetByName($datastore, "Workspace_Info", ["DEFAULT_SOURCE_TYPE"], false))
+if (IsEmpty(info) || IsEmpty(info.DEFAULT_SOURCE_TYPE)) {
+  return $feature.SOURCE_TYPE
+}
+return info.DEFAULT_SOURCE_TYPE

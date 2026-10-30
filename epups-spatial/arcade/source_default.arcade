@@ -1,0 +1,11 @@
+// Calculation on ePup_Spatial, on insert: fill {{FIELD}} from the workspace's
+// default (set with the Start or Resume Permit tool), if the editor left it empty.
+// Workspaces only (it reads Workspace_Info). One rule per field; rules.py fills {{FIELD}}.
+if (!IsEmpty($feature.{{FIELD}})) {
+  return $feature.{{FIELD}}
+}
+var info = First(FeatureSetByName($datastore, "Workspace_Info", ["DEFAULT_{{FIELD}}"], false))
+if (IsEmpty(info)) {
+  return $feature.{{FIELD}}
+}
+return info.DEFAULT_{{FIELD}}

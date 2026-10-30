@@ -1,0 +1,10 @@
+// Constraint on ePup_Spatial: VERSION_ID must match a row in ePup_Spatial_Version.
+// Add the version row before drawing its polygons.
+if (IsEmpty($feature.VERSION_ID)) {
+  return false
+}
+var versions = Filter(
+  FeatureSetByName($datastore, "ePup_Spatial_Version", ["VERSION_ID"], false),
+  "VERSION_ID = " + Text($feature.VERSION_ID)
+)
+return Count(versions) > 0

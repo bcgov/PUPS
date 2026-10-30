@@ -1,0 +1,39 @@
+// Calculation on ePup_Spatial, on insert: link a new polygon to the version being edited.
+// Workspaces only (it reads Workspace_Info).
+// ArcGIS Pro fills an empty number field with 0, so 0 means "choose the version".
+// A VERSION_ID the editor typed in is kept.
+// In order of preference:
+// 1. The active version: the permit chosen with the Start or Resume Permit tool
+//    (Workspace_Info.ACTIVE_VERSION_ID).
+// 2. The newest version made in this workspace (VERSION_ID above
+//    {{VERSION_ID_FLOOR}}, the highest in production when the workspace was made).
+//    Finish or Save Draft makes these.
+// 3. The current version (IS_CURRENT = 1), if there is exactly one: the
+//    workspace holds a single permit.
+// Otherwise it leaves 0, and VERSION_LINK rejects the polygon with a message to
+// run Start or Resume Permit, rather than guess which permit it belongs to.
+if (!IsEmpty($feature.VERSION_ID) && $feature.VERSION_ID > 0) {
+  return $feature.VERSION_ID
+}
+var versions = FeatureSetByName($datastore, "ePup_Spatial_Version", ["VERSION_ID", "IS_CURRENT"], false)
+var chosen = null
+
+var info = First(FeatureSetByName($datastore, "Workspace_Info", ["ACTIVE_VERSION_ID"], false))
+if (!IsEmpty(info) && !IsEmpty(info.ACTIVE_VERSION_ID) && info.ACTIVE_VERSION_ID > 0) {
+  chosen = First(Filter(versions, "VERSION_ID = " + Text(info.ACTIVE_VERSION_ID)))
+}
+// Reads the top row rather than using Max(), which can miss rows added in the
+// current edit session (see auto_spatial_id.arcade).
+if (IsEmpty(chosen)) {
+  chosen = First(OrderBy(Filter(versions, "VERSION_ID > {{VERSION_ID_FLOOR}}"), "VERSION_ID DESC"))
+}
+if (IsEmpty(chosen)) {
+  var current = Filter(versions, "IS_CURRENT = 1")
+  if (Count(current) == 1) {
+    chosen = First(current)
+  }
+}
+if (IsEmpty(chosen)) {
+  return $feature.VERSION_ID
+}
+return chosen.VERSION_ID
