@@ -1,4 +1,5 @@
 # PUPS: ePUPS Spatial Database
+(All of this is a Work in Progress FYI)
 
 Tools for the ePUPS spatial database: park use permit polygons, the version history behind them, and the checks that keep bad data out of production.
 
@@ -67,12 +68,3 @@ Not built yet:
 - **Promotion.** Moving an approved version into production, making it current, and marking the old one `SUPERSEDED`.
 - **Archiving and backups** in production.
 - **CORRAL sync** for authorization IDs and permit dates.
-
-## Open decisions
-
-- **Production platform.** Which server, and how it affects promotion.
-- **Authorization IDs.** Real IDs come from CORRAL. Until then, how to keep two people starting new permits at the same time from getting the same ID.
-- **IDs across workspaces.** Two workspaces open at once can hand out the same new IDs or version numbers. Final IDs may be assigned at promotion.
-- **`SUBMITTED` status.** Added for the review step; not in the original design.
-- **User IDs.** Where they come from, and filling the `users` table.
-- **Schema.** Confirm the fields, picklist values and units.
