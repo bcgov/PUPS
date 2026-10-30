@@ -4,6 +4,8 @@ Tools for the ePUPS spatial database: park use permit polygons, the version hist
 
 Editors never change production directly. An editor creates a temporary workspace, draws or edits polygons in ArcGIS Pro, and saves the changes as a new permit version. A checker runs QA, and a reviewer approves the version. Only an approved version moves toward production.
 
+**New to the tools?** Start with [Trying the ePUPS toolbox](epups-spatial/docs/TRY_THE_TOOLBOX.md): one complete run with the demo data, in about 20 minutes.
+
 ## How it works
 
 - **Production database.** One file geodatabase holds the permit polygons (`ePup_Spatial`), their versions (`ePup_Spatial_Version`) and users. The schema follows the co-worker DBML design. For now it is a development copy on the share, until the production server is chosen.
@@ -155,6 +157,7 @@ Do not run these against a database that holds real records.
 | `epups-spatial/scripts/` | Command-line tools |
 | `epups-spatial/tests/` | Test and demo scripts |
 | `epups-spatial/logs/` | QA reports and the reference data log (git ignored) |
+| `epups-spatial/docs/TRY_THE_TOOLBOX.md` | A first run through the whole workflow with the demo data |
 | `epups-spatial/docs/WORKSPACE_SETUP.md` | Step-by-step guide for editors, checkers and reviewers |
 | `epups-spatial/docs/DECISIONS.md` | Confirmed decisions and open questions |
 | `source_data\epups_spatial_dev\` | Dev production database (on the share, not in git) |
