@@ -21,7 +21,7 @@ when it is promoted to production (not built yet).
 
 New VERSION_IDs are one above the highest in the workspace and production.
 Two workspaces made at the same time can hand out the same VERSION_ID, as
-with SPATIAL_ID (see docs/WORKSPACE_SETUP.md).
+with SPATIAL_ID (see Open decisions in the README).
 """
 
 import getpass

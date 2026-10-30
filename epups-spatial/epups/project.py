@@ -67,7 +67,7 @@ def find_template():
     pro_blank = Path(arcpy.GetInstallInfo()["InstallDir"]) / PRO_BLANK_PROJECT
     if pro_blank.exists():
         print(f"  No template at {config.PROJECT_TEMPLATE}. Using Pro's blank project, "
-              f"which may open away from BC (see WORKSPACE_SETUP.md).")
+              f"which may open away from BC (see Setup in the README).")
         return pro_blank
     raise FileNotFoundError(
         f"No blank project to copy. In ArcGIS Pro, create a new Map project, "

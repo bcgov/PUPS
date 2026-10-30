@@ -21,7 +21,7 @@ PRODUCTION_PATH = PRODUCTION_FOLDER / PRODUCTION_GDB_NAME
 WORKSPACE_ROOT = PROJECT_DATA_ROOT / "epups_workspaces"
 
 # Blank ArcGIS Pro project copied for each workspace's project, saved in Pro
-# zoomed to BC (see docs/WORKSPACE_SETUP.md). Without it, the blank project
+# zoomed to BC (see Setup in the README). Without it, the blank project
 # that ships with ArcGIS Pro is used, and it opens over Australia.
 PROJECT_TEMPLATE = PROJECT_DATA_ROOT / "templates" / "epups_workspace_template.aprx"
 

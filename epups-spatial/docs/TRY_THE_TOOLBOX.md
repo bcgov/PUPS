@@ -1,16 +1,13 @@
 # Trying the ePUPS toolbox
 
-Written for: a colleague reviewing the ePUPS editing tools for the first time.
+The ePUPS toolbox lets an editor draft park use permit polygons in a temporary copy of the database, save them as a new permit version, check them, and have them reviewed, all inside ArcGIS Pro. This page walks you through one complete run with the demo data (about 10 minutes) and lists what to look at and what is still open.
 
-The ePUPS toolbox lets an editor draft park use permit polygons in a temporary copy of the database, save them as a new permit version, check them, and have them reviewed, all inside ArcGIS Pro. This page walks you through one complete run with the demo data (about 20 minutes) and lists what to look at and what is still open.
-
-Everything here runs against the **development** database, which holds test data only. Nothing you do can reach real records.
+Everything here runs against the **development** database, which holds test data only.
 
 ## Before you start
 
-- Work on the **VDI**, where ArcGIS Pro 3.4 is installed.
 - You need access to `\\spatialfiles.bcgov\Work\srm\gss\projects\gr_2026_472_park_use_permits`.
-- People are identified by a **user ID** (a number), not a name. For this run, use **7** as the editor and **9** as the checker and reviewer.
+- People are identified by a **user ID** (a number), not a name. For this run, use **7** as the editor and **9** as the checker and reviewer. Any number works while the `users` table is empty.
 
 > **Saving matters.** In ArcGIS Pro, your drawing and the tools' changes stay in Pro until you click **Edit** tab > **Save** (in the Manage Edits group). **Ctrl+S saves the project, not the edits.** Each tool ends with a yellow reminder. Click Edit > Save after drawing and after each tool.
 
@@ -24,11 +21,11 @@ In File Explorer, double-click:
 \\spatialfiles.bcgov\Work\srm\gss\projects\gr_2026_472_park_use_permits\source_data\ePUPS_Start.aprx
 ```
 
-ArcGIS Pro opens on a map of BC showing protected lands. It's read-only and shared; you only start from it. Open the toolbox from the **Catalog** pane (**View** tab > **Catalog Pane**) > **Toolboxes** > **ePUPS**. Double-click a tool to open it.
+ArcGIS Pro opens on a map of BC showing protected lands. The project is read-only and shared; you only start from it. Open the toolbox from the **Catalog** pane (**View** tab > **Catalog Pane**) > **Toolboxes** > **ePUPS**. Double-click a tool to open it.
 
 ### 2. Create a workspace: tool 1
 
-Run **1. Create Workspace** with **Editor ID** 7. Leave everything else as it is.
+Run **1. Create Workspace** with an **Editor ID**, for example 7. Leave everything else as it is.
 
 It copies the database into a new workspace named `ePUPS_Temp_Workspace` (numbered if taken) and opens it in a **new** ArcGIS Pro window. Close the starter window and work in the new one.
 
@@ -83,32 +80,20 @@ Run **2. Start or Resume Permit** with Action **Edit an existing permit**:
 
 Move polygon 3 fully inside the park, **Edit** > **Save**, then finish it and run QA again. Polygon 3 now passes, and 6812345 has a new `SUBMITTED` version holding all three of its polygons.
 
-## What to look at
-
-- **Ease of use.** Are the tool inputs clear? Is anything missing, or asked for in the wrong place?
-- **The data.** Open `ePup_Spatial` and `ePup_Spatial_Version` after each step. The version history, statuses and who-did-what should tell the story of what you did.
-- **The rules.**
-  - Try drawing a polygon before starting a permit. It should be refused.
-  - Try typing a duplicate `SPATIAL_ID`. That should be refused too.
-- **Versions.** Editing any polygon of a permit gives that permit a new version, and moves all of its polygons onto it.
-
 ## What isn't built yet
 
 - **Promotion.** Approved versions don't go into the production database yet. Nothing in the workspace changes production.
 - **Retiring old versions.** An approved version doesn't become current, and the old one isn't marked retired. Both wait on promotion.
 - **User IDs** aren't checked against a list, because the `users` table is empty.
 
-## Open questions we'd like your view on
+## If something goes wrong
 
-1. **Authorization IDs.** New permits get the next number after the highest in the database. Should they come from CORRAL instead?
-2. **The `SUBMITTED` status.** It isn't in the original design (DBML). Is it the right way to mark "finished, waiting for review"?
-3. **Promotion and history.** When a new version is promoted, should the old polygons stay in the same feature class marked retired, or move to geodatabase archiving?
-4. **Who reviews.** Should the tools refuse, rather than warn, when the reviewer is the person who made the version?
+- **Changes are missing, or a tool doesn't see your polygons.** The edits weren't saved. Click **Edit** tab > **Save**; Ctrl+S only saves the project.
+- **"This polygon has no version to belong to".** No permit is started. Run **2. Start or Resume Permit**, then draw again.
+- **No "Drawing:" template in Create Features.** Click "Click here to see templates not listed" in the pane, or draw with the `ePup_Spatial` template. The polygons still go to the permit you started.
+- **The toolbox has a red X or doesn't show recent changes.** Right-click it in Catalog > **Refresh**, or restart ArcGIS Pro.
+- **QA warns about a table "not part of the ePUPS schema".** An editing tool left it, for example `Links` from **Transform**. Delete it in the Catalog pane.
+- **"Not approved: n errors".** The version's polygons fail QA. Choose **Return to editor**, fix them, finish again, and rerun QA.
 
-## More detail
+See the [README](../../README.md) for how the pieces fit, setup, and the command-line tools.
 
-- [Step-by-step guide](WORKSPACE_SETUP.md): every tool's inputs, what each check covers, and troubleshooting.
-- [README](../../README.md): how the pieces fit, the command-line scripts, and project status.
-- [Decisions](DECISIONS.md): what has been decided so far, and why.
-
-When you're done, close ArcGIS Pro. Your workspace stays in `source_data\epups_workspaces`, and it can be deleted.

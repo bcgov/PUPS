@@ -5,7 +5,7 @@ Plain data only: no ArcPy import, so the field lists can be reviewed
 without ArcGIS. epups/builder.py applies these definitions to both
 production and editor workspaces.
 
-Source: co-worker's DBML diagram (current design, flexible).
+Source: the ePUPS DBML diagram (current design, subject to change).
 
 Managed by ArcGIS and not listed here:
 - OBJECTID (auto-generated, reassigned when records are copied or appended)

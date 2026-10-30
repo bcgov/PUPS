@@ -59,3 +59,10 @@ Thumbs.db
 
 # Private planning notes (not for the repository)
 PLANNING.local.md
+
+# Internal docs, kept on the share only
+epups-spatial/docs/WORKSPACE_SETUP.md
+epups-spatial/docs/DECISIONS.md
+epups-spatial/docs/IMPLEMENTATION.md
+epups-spatial/docs/RUN_LOG.md
+epups-spatial/docs/DEMO.md
